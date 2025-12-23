@@ -1,4 +1,7 @@
---[[
+--[[init
+--
+--
+--
 
     If you don't know anything about Lua, I recommend taking some time to read through
     a guide. One possible example which will only take 10-15 minutes:
@@ -133,6 +136,49 @@ vim.o.scrolloff = 10
 -- See `:help 'confirm'`
 vim.o.confirm = true
 
+-- local gdproject = io.open(vim.fn.getcwd() .. '/project.godot', 'r')
+-- if gdproject then
+--   io.close(gdproject)
+--   print('BEFORE serverstart:', vim.v.servername)
+--   vim.fn.serverstart './godothost'
+--   print('AFTER serverstart:', vim.v.servername)
+-- end
+-- local gdproject = vim.fn.getcwd() .. '/project.godot'
+-- if gdproject then
+--   vim.fn.serverstart './godothost'
+-- end
+local root = vim.fn.getcwd()
+local project_file = root .. '/project.godot'
+
+local f = io.open(project_file, 'r')
+if f then
+  f:close()
+
+  local socket = root .. '/godothost'
+  os.remove(socket) -- remove stale socket
+  vim.fn.serverstart(socket) -- ABSOLUTE PATH
+  vim.g.godot_socket = socket
+end
+function TypstWatch()
+  -- Split and resize
+  vim.cmd 'vsp'
+  vim.cmd 'vertical resize 20'
+
+  -- Open terminal and run typst watch on current file
+  local file = vim.fn.expand '%:'
+  vim.cmd('terminal typst watch ' .. file)
+
+  -- Move cursor back to left window
+  vim.cmd 'normal! <C-w>h'
+end
+
+-- Keymaps
+vim.keymap.set('n', '<leader>tc', TypstWatch, { silent = true })
+
+vim.keymap.set('n', '<leader>tr', function()
+  local pdf = vim.fn.expand '%:p:r' .. '.pdf'
+  vim.fn.jobstart({ 'zathura', '--fork', pdf }, { detach = true })
+end, { silent = true })
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -142,6 +188,14 @@ vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- Diagnostic keymaps
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+
+vim.keymap.set('n', '<leader>rr', ':RunCode<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>rf', ':RunFile<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>rft', ':RunFile tab<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>rp', ':RunProject<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>rc', ':RunClose<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>crf', ':CRFiletype<CR>', { noremap = true, silent = false })
+vim.keymap.set('n', '<leader>crp', ':CRProjects<CR>', { noremap = true, silent = false })
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -165,6 +219,9 @@ vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left wind
 vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+
+vim.keymap.set('n', '<C-p>', '<Cmd>BufferPick<CR>')
+vim.keymap.set('n', '<C-x>', '<Cmd>BufferClose<CR>')
 
 vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory' })
 -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
@@ -216,6 +273,7 @@ rtp:prepend(lazypath)
 require('lazy').setup({
   -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
   'NMAC427/guess-indent.nvim', -- Detect tabstop and shiftwidth automatically
+  -- 'Cretezy/godot-server.nvim',
   -- TODO: !!!
   -- NOTE: Plugins can also be added by using a table,
   -- with the first argument being the link and the following
@@ -269,12 +327,95 @@ require('lazy').setup({
     'stevearc/oil.nvim',
     ---@module 'oil'
     ---@type oil.SetupOpts
-    opts = {},
+    opts = {
+      view_options = {
+        show_hidden = true,
+      },
+    },
     -- Optional dependencies
     dependencies = { { 'nvim-mini/mini.icons', opts = {} } },
     -- dependencies = { "nvim-tree/nvim-web-devicons" }, -- use if you prefer nvim-web-devicons
     -- Lazy loading is not recommended because it is very tricky to make it work correctly in all situations.
     lazy = false,
+  },
+  {
+    'ThePrimeagen/vim-be-good',
+  },
+  {
+    'nvim-flutter/flutter-tools.nvim',
+    lazy = false,
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+      'stevearc/dressing.nvim', -- optional for vim.ui.select
+    },
+    config = true,
+  },
+  {
+    'sylvanfranklin/omni-preview.nvim',
+    dependencies = {
+      -- Typst
+      { 'chomosuke/typst-preview.nvim', lazy = true },
+      -- CSV
+      { 'hat0uma/csvview.nvim', lazy = true },
+
+      { 'toppair/peek.nvim', lazy = true, build = 'deno task --quiet build:fast' },
+    },
+    opts = {},
+    keys = {
+      { '<leader>po', '<cmd>OmniPreview start<CR>', desc = 'OmniPreview Start' },
+      { '<leader>pc', '<cmd>OmniPreview stop<CR>', desc = 'OmniPreview Stop' },
+    },
+  },
+  {
+    'nvim-neotest/neotest',
+    dependencies = {
+      'nvim-neotest/nvim-nio',
+      'nvim-lua/plenary.nvim',
+      'antoinemadec/FixCursorHold.nvim',
+      'nvim-treesitter/nvim-treesitter',
+    },
+  },
+  {
+    'folke/snacks.nvim',
+    ---@type snacks.Config
+    opts = {
+      animate = {
+        -- your animate configuration comes here
+        -- or leave it empty to use the default settings
+        -- refer to the configuration section below
+      },
+    },
+  },
+  'brianhuster/live-preview.nvim',
+  dependencies = {
+    'nvim-telescope/telescope.nvim',
+  },
+  {
+    'habamax/vim-godot',
+
+    event = 'VimEnter',
+  },
+  {
+    'kaarmu/typst.vim',
+    ft = 'typst',
+    lazy = false,
+  },
+  {
+    'romgrk/barbar.nvim',
+    dependencies = {
+      'lewis6991/gitsigns.nvim', -- OPTIONAL: for git status
+      'nvim-tree/nvim-web-devicons', -- OPTIONAL: for file icons
+    },
+    init = function()
+      vim.g.barbar_auto_setup = false
+    end,
+    opts = {
+      -- lazy.nvim will automatically call setup for you. put your options here, anything missing will use the default:
+      -- animation = true,
+      -- insert_at_start = true,
+      -- …etc.
+    },
+    version = '^1.0.0', -- optional: only update when a new 1.x version is released
   },
   {
     -- Useful plugin to show you pending keybinds.
@@ -639,6 +780,10 @@ require('lazy').setup({
       --  When you add blink.cmp, luasnip, etc. Neovim now has *more* capabilities.
       --  So, we create new capabilities with blink.cmp, and then broadcast that to the servers.
       local capabilities = require('blink.cmp').get_lsp_capabilities()
+      -- require('lspconfig').gdscript.setup(capabilities)
+      vim.lsp.enable 'gdscript'
+      vim.lsp.enable 'html'
+      vim.lsp.enable 'typescript'
 
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
@@ -653,6 +798,17 @@ require('lazy').setup({
         -- clangd = {},
         -- gopls = {},
         pyright = {},
+        ts_ls = {},
+        matlab_ls = {
+          settings = {
+            MATLAB = {
+              installPath = '/Applications/MATLAB_R2023b.app',
+            },
+          },
+        },
+
+        tinymist = {},
+        -- gdtoolkit = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         -- Some languages (like typescript) have entire language plugins that can be useful:
@@ -662,6 +818,7 @@ require('lazy').setup({
         -- ts_ls = {},
         --
 
+        html = {},
         lua_ls = {
           -- cmd = { ... },
           -- filetypes = { ... },
@@ -746,6 +903,7 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
+        --pyright = { 'isort', 'black' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
@@ -897,6 +1055,9 @@ require('lazy').setup({
       -- - sr)'  - [S]urround [R]eplace [)] [']
       require('mini.surround').setup()
 
+      --require('mini.sessions').setup()
+      --require('mini.files').setup()
+      require('mini.indentscope').setup()
       -- Simple and easy statusline.
       --  You could remove this setup call if you don't like it,
       --  and try some other statusline plugin
@@ -917,7 +1078,7 @@ require('lazy').setup({
     end,
   },
 
-  -- TODO hi
+  -- TODO: hi
   --
   { -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
@@ -925,7 +1086,7 @@ require('lazy').setup({
     main = 'nvim-treesitter.configs', -- Sets main module to use for opts
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'query', 'vim', 'vimdoc' },
       -- Autoinstall languages that are not installed
       auto_install = true,
       highlight = {
@@ -935,7 +1096,7 @@ require('lazy').setup({
         --  the list of additional_vim_regex_highlighting and disabled languages for indent.
         additional_vim_regex_highlighting = { 'ruby' },
       },
-      indent = { enable = true, disable = { 'ruby' } },
+      indent = { enable = true, disable = { 'ruby', 'gdscript' } },
     },
     -- There are additional nvim-treesitter modules that you can use to interact
     -- with nvim-treesitter. You should go explore a few and see what interests you:
@@ -954,18 +1115,19 @@ require('lazy').setup({
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug',
+  require 'kickstart.plugins.debug',
   -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
-  -- require 'kickstart.plugins.autopairs',
+  require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.autopairs',
   -- require 'kickstart.plugins.neo-tree',
-  -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.python',
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
@@ -995,3 +1157,4 @@ require('lazy').setup({
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
+--

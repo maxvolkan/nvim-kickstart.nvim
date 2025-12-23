@@ -97,7 +97,22 @@ return {
         'delve',
       },
     }
+    dap.adapters.godot = {
+      type = 'server',
+      host = '127.0.0.1',
+      port = 6006,
+    }
 
+    -- Godot DAP configuration (must be LIST!)
+    dap.configurations.gdscript = {
+      {
+        type = 'godot',
+        request = 'launch',
+        name = 'Launch Scene',
+        project = vim.fn.getcwd(),
+        launch_scene = true,
+      },
+    }
     -- Dap UI setup
     -- For more information, see |:help nvim-dap-ui|
     dapui.setup {
