@@ -1,15 +1,4 @@
---[[init
---
---
-      - https://learnxinyminutes.com/docs/lua/
-
-   - :help lua-guide
-    - (or HTML version): https://neovim.io/doc/user/lua-guide.html
-
-
-    MOST IMPORTANTLY, we provide a keymap "<space>sh" to [s]earch the [h]elp documentation,
-
--- ]]
+--[[init - https://learnxinyminutes.com/docs/lua/ - :help lua-guide - (or HTML version): https://neovim.io/doc/user/lua-guide.html MOST IMPORTANTLY, we provide a keymap "<space>sh" to [s]earch the [h]elp documentation, ]]
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -791,14 +780,14 @@ require('lazy').setup({
             },
           },
         },
-        ts_ls = {},
-        matlab_ls = {
-          settings = {
-            MATLAB = {
-              installPath = '/Applications/MATLAB_R2023b.app',
-            },
-          },
-        },
+        -- ts_ls = {},
+        -- matlab_ls = {
+        --   settings = {
+        --     MATLAB = {
+        --       installPath = '/Applications/MATLAB_R2023b.app',
+        --     },
+        --   },
+        -- },
 
         tinymist = {},
         -- gdtoolkit = {},
@@ -811,7 +800,7 @@ require('lazy').setup({
         -- ts_ls = {},
         --
 
-        html = {},
+        -- html = {},
         lua_ls = {
           -- cmd = { ... },
           -- filetypes = { ... },
