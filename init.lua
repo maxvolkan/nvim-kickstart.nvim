@@ -91,10 +91,22 @@ local f = io.open(project_file, 'r')
 if f then
   f:close()
 
-  local socket = root .. '/godothost'
-  os.remove(socket) -- remove stale socket
-  vim.fn.serverstart(socket) -- ABSOLUTE PATH
-  vim.g.godot_socket = socket
+  -- Windows requires a specific Named Pipe format
+  local socket
+  if vim.fn.has 'win32' == 1 then
+    socket = [[\\.\pipe\godothost]]
+  else
+    socket = root .. '/godothost'
+    os.remove(socket) -- remove stale socket (Unix only)
+  end
+
+  -- Start the server
+  local ok, err = pcall(vim.fn.serverstart, socket)
+  if not ok then
+    print('Godot Remote Server failed to start: ' .. err)
+  else
+    vim.g.godot_socket = socket
+  end
 end
 
 function TypstWatch()
@@ -162,6 +174,13 @@ vim.keymap.set('n', '<C-p>', '<Cmd>BufferPick<CR>')
 vim.keymap.set('n', '<C-x>', '<Cmd>BufferClose<CR>')
 
 vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory' })
+
+-- Tab management
+vim.keymap.set('n', '<leader>Tn', '<cmd>tabnew<CR>', { desc = '[T]ab [N]ew' })
+vim.keymap.set('n', '<leader>Tc', '<cmd>tabclose<CR>', { desc = '[T]ab [C]lose' })
+vim.keymap.set('n', '<leader>To', '<cmd>tabonly<CR>', { desc = '[T]ab close [O]thers' })
+vim.keymap.set('n', '<Tab>', '<cmd>tabnext<CR>', { desc = 'Next tab' })
+vim.keymap.set('n', '<S-Tab>', '<cmd>tabprevious<CR>', { desc = 'Previous tab' })
 -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
 -- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
 -- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
@@ -184,8 +203,6 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
-local pyright_utils = require 'lsp/pyright'
-local python_path = pyright_utils.get_python_path()
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -266,21 +283,6 @@ require('lazy').setup({
   --
   -- Then, because we use the `opts` key (recommended), the configuration runs
   -- after the plugin has been loaded as `require(MODULE).setup(opts)`.
-  {
-    'stevearc/oil.nvim',
-    ---@module 'oil'
-    ---@type oil.SetupOpts
-    opts = {
-      view_options = {
-        show_hidden = true,
-      },
-    },
-    -- Optional dependencies
-    dependencies = { { 'nvim-mini/mini.icons', opts = {} } },
-    -- dependencies = { "nvim-tree/nvim-web-devicons" }, -- use if you prefer nvim-web-devicons
-    -- Lazy loading is not recommended because it is very tricky to make it work correctly in all situations.
-    lazy = false,
-  },
   {
     'benlubas/molten-nvim',
     version = '^1.0.0', -- use version <2.0.0 to avoid breaking changes
@@ -431,6 +433,7 @@ require('lazy').setup({
       spec = {
         { '<leader>s', group = '[S]earch' },
         { '<leader>t', group = '[T]oggle' },
+        { '<leader>T', group = '[T]ab' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
       },
     },
@@ -747,7 +750,6 @@ require('lazy').setup({
       local capabilities = require('blink.cmp').get_lsp_capabilities()
       -- require('lspconfig').gdscript.setup(capabilities)
       vim.lsp.enable 'gdscript'
-      vim.lsp.enable 'html'
       vim.lsp.enable 'typescript'
 
       -- Enable the following language servers
@@ -764,16 +766,24 @@ require('lazy').setup({
         -- gopls = {},
         pyright = {
           on_attach = function(client, bufnr)
-            -- Optional: Add LSP keymaps here (e.g., goto definition)
             vim.keymap.set('n', 'gd', vim.lsp.buf.definition, { buffer = bufnr })
+          end,
+          before_init = function(params, config)
+            -- Under the native LSP API params.workspaceFolders can be vim.NIL
+            -- (userdata), which is truthy in Lua, so guard with a type check.
+            local wf = params.workspaceFolders
+            local root
+            if type(wf) == 'table' and wf[1] and wf[1].uri then
+              root = vim.uri_to_fname(wf[1].uri)
+            end
+            config.settings = config.settings or {}
+            config.settings.python = config.settings.python or {}
+            config.settings.python.pythonPath = require('lsp/pyright').get_python_path(root)
           end,
           settings = {
             python = {
-              -- Use the dynamically detected Python path
-              pythonPath = python_path,
-              -- Optional: Configure type checking strictness
               analysis = {
-                typeCheckingMode = 'basic', -- Options: "off", "basic", "strict"
+                typeCheckingMode = 'basic',
                 autoSearchPaths = true,
                 useLibraryCodeForTypes = true,
               },
@@ -800,7 +810,7 @@ require('lazy').setup({
         -- ts_ls = {},
         --
 
-        -- html = {},
+        html = {},
         lua_ls = {
           -- cmd = { ... },
           -- filetypes = { ... },
@@ -836,19 +846,19 @@ require('lazy').setup({
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
+      -- Register each server's overrides with Neovim's native LSP (0.11+).
+      -- mason-lspconfig v2 (main branch) removed the `handlers` option, so the
+      -- old require('lspconfig')[name].setup(server) path no longer runs. We
+      -- instead push our config through vim.lsp.config and let mason-lspconfig's
+      -- automatic_enable start the installed servers.
+      for server_name, server in pairs(servers) do
+        server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+        vim.lsp.config(server_name, server)
+      end
+
       require('mason-lspconfig').setup {
         ensure_installed = {}, -- explicitly set to an empty table (Kickstart populates installs via mason-tool-installer)
-        automatic_installation = false,
-        handlers = {
-          function(server_name)
-            local server = servers[server_name] or {}
-            -- This handles overriding only values explicitly passed
-            -- by the server configuration above. Useful when disabling
-            -- certain features of an LSP (for example, turning off formatting for ts_ls)
-            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-            require('lspconfig')[server_name].setup(server)
-          end,
-        },
+        automatic_enable = true, -- vim.lsp.enable() installed servers (mason-lspconfig v2)
       }
     end,
   },
